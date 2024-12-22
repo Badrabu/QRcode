@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: QR Code Generator Application
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Resources:
+  # API Gateway
+  QRCodeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Auth:
+        ApiKeyRequired: true
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          Description: Usage plan for QR Code API
+          Quota:
+            Limit: 1000
+            Period: DAY
+          Throttle:
+            BurstLimit: 10
+            RateLimit: 5
+
+  # Lambda Function
+  QRCodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref QRCodeBucket
+      Events:
+        GenerateQR:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QRCodeApi
+            Path: /generate
+            Method: POST
+
+  # S3 Bucket for storing QR codes
+  QRCodeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+  # Amplify App
+  QRCodeAmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: qr-code-generator
+      Repository: YOUR_REPOSITORY_URL
+      Platform: WEB
+      BuildSpec: |-
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm install
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: build
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${QRCodeApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  ApiKeyId:
+    Description: API Key ID
+    Value: !Ref QRCodeApiKey
+  BucketName:
+    Description: S3 Bucket Name
+    Value: !Ref QRCodeBucket
+t
